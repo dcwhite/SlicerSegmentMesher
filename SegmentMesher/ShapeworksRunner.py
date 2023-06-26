@@ -7,39 +7,31 @@ from slicer.util import VTKObservationMixin
 import logging
 
 #
-# SegmentMesher
+# ShapeworksRunner
 #
 
-class SegmentMesher(ScriptedLoadableModule):
+class ShapeworksRunner(ScriptedLoadableModule):
   """Uses ScriptedLoadableModule base class, available at:
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
   """
 
   def __init__(self, parent):
     ScriptedLoadableModule.__init__(self, parent)
-    self.parent.title = "Segment Mesher"
-    self.parent.categories = ["Segmentation"]
+    self.parent.title = "Shapeworks Runner"
+    self.parent.categories = ["Shape Analysis"]
     self.parent.dependencies = []
-    self.parent.contributors = ["Andras Lasso (PerkLab - Queen's University)"]
-    self.parent.helpText = """Create volumetric mesh consisting of tetrahedral elements using Cleaver2 or TetGen meshers.
-<p>See <a href="https://github.com/lassoan/SlicerSegmentMesher/blob/master/README.md">module documentation</a> for description of meshing parameters.
-<p><a href="https://sciinstitute.github.io/cleaver.pages">Cleaver2</a> is freely usable, without any restrictions.
-<p><a href="http://www.tetgen.org">TetGen<a> is only free for private, research, and educational use (see <a href="https://people.sc.fsu.edu/~jburkardt/examples/tetgen/license.txt">license</a> for details).
+    self.parent.contributors = ["Dan White (SCI Institute - University of Utah)"]
+    self.parent.helpText = """First version of Shapeworks runner extension
 """
-    #self.parent.helpText += self.getDefaultModuleDocumentationLink()
     self.parent.acknowledgementText = """
-This module was originally developed by Andras Lasso (Queen's University, PerkLab) to serve as a convenient frontend for existing commonly used open-source generator software.
-
-<p>Cleaver is an Open Source software project that is principally funded through the SCI Institute's NIH/NIGMS CIBC Center. Please use the following acknowledgment and send references to any publications, presentations, or successful funding applications that make use of NIH/NIGMS CIBC software or data sets to <a href="http://www.sci.utah.edu/software/cleaver.html">SCI</a>: "This project was supported by the National Institute of General Medical Sciences of the National Institutes of Health under grant number P41 GM103545-18."
-
-<p>TetGen citation: Si, Hang (2015). "TetGen, a Delaunay-based Tetrahedral Mesh Generator". ACM Transactions on Mathematical Software. 41 (2): 11:1-11:36. doi:10.1145/2629697
+Insert acknowledgment here.
 """
 
 #
-# SegmentMesherWidget
+# ShapeworksRunnerWidget
 #
 
-class SegmentMesherWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
+class ShapeworksRunnerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   """Uses ScriptedLoadableModuleWidget base class, available at:
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
   """
@@ -57,32 +49,27 @@ class SegmentMesherWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def setup(self):
     ScriptedLoadableModuleWidget.setup(self)
 
-    self.logic = SegmentMesherLogic()
+    self.logic = ShapeworksRunnerLogic()
     self.logic.logCallback = self.addLog
     self.modelGenerationInProgress = False
 
-    uiWidget = slicer.util.loadUI(self.resourcePath('UI/SegmentMesher.ui'))
+    uiWidget = slicer.util.loadUI(self.resourcePath('UI/ShapeworksRunner.ui'))
     self.layout.addWidget(uiWidget)
     self.ui = slicer.util.childWidgetVariables(uiWidget)
     uiWidget.setPalette(slicer.util.mainWindow().style().standardPalette())
 
     # Finish UI setup ...
-    self.ui.parameterNodeSelector.addAttribute( "vtkMRMLScriptedModuleNode", "ModuleName", "SegmentMesher" )
+    self.ui.parameterNodeSelector.addAttribute( "vtkMRMLScriptedModuleNode", "ModuleName", "ShapeworksRunner" )
     self.ui.parameterNodeSelector.setMRMLScene( slicer.mrmlScene )
     self.ui.inputSegmentationSelector.setMRMLScene( slicer.mrmlScene )
     self.ui.inputModelSelector.setMRMLScene( slicer.mrmlScene )
     self.ui.outputModelSelector.setMRMLScene( slicer.mrmlScene )
 
     self.ui.methodSelectorComboBox.addItem("Cleaver", METHOD_CLEAVER)
-    self.ui.methodSelectorComboBox.addItem("TetGen", METHOD_TETGEN)
 
     customCleaverPath = self.logic.getCustomCleaverPath()
-    self.ui.customCleaverPathSelector.setCurrentPath(customCleaverPath)
-    self.ui.customCleaverPathSelector.nameFilters = [self.logic.cleaverFilename]
-
-    customTetGenPath = self.logic.getCustomTetGenPath()
-    self.ui.customTetGenPathSelector.setCurrentPath(customTetGenPath)
-    self.ui.customTetGenPathSelector.nameFilters = [self.logic.tetGenFilename]
+    self.ui.customShapeworksPathSelector.setCurrentPath(customCleaverPath)
+    self.ui.customShapeworksPathSelector.nameFilters = [self.logic.shapeworksFilename]
 
     clipNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLClipModelsNode")
     self.ui.clipNodeWidget.setMRMLClipNode(clipNode)
@@ -101,7 +88,6 @@ class SegmentMesherWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Immediately update deleteTemporaryFiles in the logic to make it possible to decide to
     # keep the temporary file while the model generation is running
     self.ui.keepTemporaryFilesCheckBox.connect("toggled(bool)", self.onKeepTemporaryFilesToggled)
-    self.ui.tetgenUseSurface.connect("toggled(bool)", self.updateMRMLFromGUI)
 
     #Parameter node connections
     self.ui.inputSegmentationSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
@@ -119,14 +105,7 @@ class SegmentMesherWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.cleaverAdditionalParametersWidget.connect("textChanged(const QString&)", self.updateParameterNodeFromGUI)
     self.ui.cleaverRemoveBackgroundMeshCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
     self.ui.cleaverPaddingPercentSpinBox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
-    self.ui.customCleaverPathSelector.connect("currentPathChanged(const QString&)", self.updateParameterNodeFromGUI)
-
-    self.ui.tetgenUseSurface.connect("toggled(bool)", self.updateParameterNodeFromGUI)
-    self.ui.tetgenRatioParameterWidget.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
-    self.ui.tetgenAngleParameterWidget.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
-    self.ui.tetgenVolumeParameterWidget.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
-    self.ui.tetGenAdditionalParametersWidget.connect("textChanged(const QString&)", self.updateParameterNodeFromGUI)
-    self.ui.customTetGenPathSelector.connect("currentPathChanged(const QString&)", self.updateParameterNodeFromGUI)
+    self.ui.customShapeworksPathSelector.connect("currentPathChanged(const QString&)", self.updateParameterNodeFromGUI)
 
     # Add vertical spacer
     self.layout.addStretch(1)
@@ -245,15 +224,7 @@ class SegmentMesherWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.cleaverAdditionalParametersWidget.text = self._parameterNode.GetParameter("cleaverAdditionalParameters")
     self.ui.cleaverRemoveBackgroundMeshCheckBox.checked = (self._parameterNode.GetParameter("cleaverRemoveBackgroundMesh") == "true")
     self.ui.cleaverPaddingPercentSpinBox.value = int(self._parameterNode.GetParameter("cleaverPaddingPercent"))
-    self.ui.customCleaverPathSelector.setCurrentPath(self._parameterNode.GetParameter("customCleaverPath"))
-
-    self.ui.tetgenUseSurface.checked = (self._parameterNode.GetParameter("tetgenUseSurface") == "true")
-    self.ui.tetgenRatioParameterWidget.value = float(self._parameterNode.GetParameter("tetgenRatioParameter"))
-    self.ui.tetgenAngleParameterWidget.value = float(self._parameterNode.GetParameter("tetgenAngleParameter"))
-    self.ui.tetgenVolumeParameterWidget.value = float(self._parameterNode.GetParameter("tetgenVolumeParameter"))
-    self.ui.tetGenAdditionalParametersWidget.text = self._parameterNode.GetParameter("tetGenAdditionalParameters")
-    self.ui.customTetGenPathSelector.setCurrentPath(self._parameterNode.GetParameter("customTetGenPath"))
-
+    self.ui.customShapeworksPathSelector.setCurrentPath(self._parameterNode.GetParameter("customCleaverPath"))
 
     # Update buttons states and tooltips
     self.updateMRMLFromGUI()
@@ -289,15 +260,7 @@ class SegmentMesherWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._parameterNode.SetParameter("cleaverAdditionalParameters", self.ui.cleaverAdditionalParametersWidget.text)
     self._parameterNode.SetParameter("cleaverRemoveBackgroundMesh", "true" if self.ui.cleaverRemoveBackgroundMeshCheckBox.checked else "false")
     self._parameterNode.SetParameter("cleaverPaddingPercent", str(self.ui.cleaverPaddingPercentSpinBox.value))
-    self._parameterNode.SetParameter("customCleaverPath", self.ui.customCleaverPathSelector.currentPath)
-
-    #TetGen parameters
-    self._parameterNode.SetParameter("tetgenUseSurface", "true" if self.ui.tetgenUseSurface.checked else "false")
-    self._parameterNode.SetParameter("tetgenRatioParameter", str(self.ui.tetgenRatioParameterWidget.value))
-    self._parameterNode.SetParameter("tetgenAngleParameter", str(self.ui.tetgenAngleParameterWidget.value))
-    self._parameterNode.SetParameter("tetgenVolumeParameter", str(self.ui.tetgenVolumeParameterWidget.value))
-    self._parameterNode.SetParameter("tetGenAdditionalParameters", self.ui.tetGenAdditionalParametersWidget.text)
-    self._parameterNode.SetParameter("customTetGenPath", self.ui.customTetGenPathSelector.currentPath)
+    self._parameterNode.SetParameter("customCleaverPath", self.ui.customShapeworksPathSelector.currentPath)
 
     self._parameterNode.EndModify(wasModified)
 
@@ -306,7 +269,7 @@ class SegmentMesherWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     method = self.ui.methodSelectorComboBox.itemData(self.ui.methodSelectorComboBox.currentIndex)
 
     #Enable correct input selections
-    inputIsModel = (self.ui.tetgenUseSurface.isChecked() and method == METHOD_TETGEN)
+    inputIsModel = False
     self.ui.inputSegmentationLabel.visible = not inputIsModel
     self.ui.inputSegmentationSelector.visible = not inputIsModel
     self.ui.segmentSelectorLabel.visible = not inputIsModel
@@ -332,34 +295,20 @@ class SegmentMesherWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.segmentSelectorCombBox.setCheckState(index, qt.Qt.Checked)
 
     self.ui.CleaverParametersGroupBox.visible = (method == METHOD_CLEAVER)
-    self.ui.TetGenParametersGroupBox.visible = (method == METHOD_TETGEN)
 
-    if method == METHOD_TETGEN and self.ui.tetgenUseSurface.isChecked():
-      if not self.ui.inputModelSelector.currentNode():
-        self.ui.applyButton.text = "Select input surface"
-        self.ui.applyButton.enabled = False
-      elif not self.ui.outputModelSelector.currentNode():
-        self.ui.applyButton.text = "Select an output model node"
-        self.ui.applyButton.enabled = False
-      elif self.ui.inputModelSelector.currentNode() == self.ui.outputModelSelector.currentNode():
-        self.ui.applyButton.text = "Choose different Output model"
-        self.ui.applyButton.enabled = False
-      else:
-        self.ui.applyButton.text = "Apply"
-        self.ui.applyButton.enabled = True
+
+    if not self.ui.inputSegmentationSelector.currentNode():
+      self.ui.applyButton.text = "Select input segmentation"
+      self.ui.applyButton.enabled = False
+    elif not self.ui.outputModelSelector.currentNode():
+      self.ui.applyButton.text = "Select an output model node"
+      self.ui.applyButton.enabled = False
+    elif self.ui.inputSegmentationSelector.currentNode() == self.ui.outputModelSelector.currentNode():
+      self.ui.applyButton.text = "Choose different Output model"
+      self.ui.applyButton.enabled = False
     else:
-      if not self.ui.inputSegmentationSelector.currentNode():
-        self.ui.applyButton.text = "Select input segmentation"
-        self.ui.applyButton.enabled = False
-      elif not self.ui.outputModelSelector.currentNode():
-        self.ui.applyButton.text = "Select an output model node"
-        self.ui.applyButton.enabled = False
-      elif self.ui.inputSegmentationSelector.currentNode() == self.ui.outputModelSelector.currentNode():
-        self.ui.applyButton.text = "Choose different Output model"
-        self.ui.applyButton.enabled = False
-      else:
-        self.ui.applyButton.text = "Apply"
-        self.ui.applyButton.enabled = True
+      self.ui.applyButton.text = "Apply"
+      self.ui.applyButton.enabled = True
 
     self.updateParameterNodeFromGUI()
 
@@ -391,8 +340,7 @@ class SegmentMesherWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.statusLabel.plainText = ''
     slicer.app.setOverrideCursor(qt.Qt.WaitCursor)
     try:
-      self.logic.setCustomCleaverPath(self.ui.customCleaverPathSelector.currentPath)
-      self.logic.setCustomTetGenPath(self.ui.customTetGenPathSelector.currentPath)
+      self.logic.setCustomCleaverPath(self.ui.customShapeworksPathSelector.currentPath)
 
       self.logic.deleteTemporaryFiles = not self.ui.keepTemporaryFilesCheckBox.checked
       self.logic.logStandardOutput = self.ui.showDetailedLogDuringExecutionCheckBox.checked
@@ -412,18 +360,6 @@ class SegmentMesherWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
           self.ui.outputModelSelector.currentNode(), segments, self.ui.cleaverAdditionalParametersWidget.text,
           self.ui.cleaverRemoveBackgroundMeshCheckBox.isChecked(),
           self.ui.cleaverPaddingPercentSpinBox.value * 0.01, self.ui.cleaverFeatureScalingParameterWidget.value, self.ui.cleaverSamplingParameterWidget.value, self.ui.cleaverRateParameterWidget.value)
-      else:
-        if self.ui.tetgenUseSurface.isChecked():
-          if self.ui.inputModelSelector.currentNode().GetUnstructuredGrid() is not None:
-            self.addLog("Error: Mesh must be a surface, not volumetric")
-            return
-          self.logic.createMeshFromPolyDataTetGen(self.ui.inputModelSelector.currentNode().GetPolyData(),
-            self.ui.outputModelSelector.currentNode(), self.ui.tetGenAdditionalParametersWidget.text,
-            self.ui.tetgenRatioParameterWidget.value, self.ui.tetgenAngleParameterWidget.value, self.ui.tetgenVolumeParameterWidget.value)
-        else:
-          self.logic.createMeshFromSegmentationTetGen(self.ui.inputSegmentationSelector.currentNode(),
-            self.ui.outputModelSelector.currentNode(), segments, self.ui.tetGenAdditionalParametersWidget.text,
-            self.ui.tetgenRatioParameterWidget.value, self.ui.tetgenAngleParameterWidget.value, self.ui.tetgenVolumeParameterWidget.value)
 
     except Exception as e:
       print(e)
@@ -442,10 +378,10 @@ class SegmentMesherWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     slicer.app.processEvents()  # force update
 
 #
-# SegmentMesherLogic
+# ShapeworksRunnerLogic
 #
 
-class SegmentMesherLogic(ScriptedLoadableModuleLogic):
+class ShapeworksRunnerLogic(ScriptedLoadableModuleLogic):
   """This class should implement all the actual
   computation done by your module.  The interface
   should be such that other python code can import
@@ -461,17 +397,14 @@ class SegmentMesherLogic(ScriptedLoadableModuleLogic):
     self.abortRequested = False
     self.deleteTemporaryFiles = True
     self.logStandardOutput = False
-    self.customCleaverPathSettingsKey = 'SegmentMesher/CustomCleaverPath'
-    self.customTetGenPathSettingsKey = 'SegmentMesher/CustomTetGenPath'
+    self.customCleaverPathSettingsKey = 'ShapeworksRunner/CustomShapeworksPath'
     import os
     self.scriptPath = os.path.dirname(os.path.abspath(__file__))
     self.cleaverPath = None # this will be determined dynamically
-    self.tetGenPath = None # this will be determined dynamically
 
     import platform
     executableExt = '.exe' if platform.system() == 'Windows' else ''
-    self.cleaverFilename = 'cleaver-cli' + executableExt
-    self.tetGenFilename = 'tetgen' + executableExt
+    self.shapeworksFilename = 'shapeworks' + executableExt
 
     self.binDirCandidates = [
       # install tree
@@ -499,14 +432,6 @@ class SegmentMesherLogic(ScriptedLoadableModuleLogic):
     self.setParameterIfNotDefined(parameterNode, "cleaverPaddingPercent", "10")
     self.setParameterIfNotDefined(parameterNode, "customCleaverPath", "")
 
-    self.setParameterIfNotDefined(parameterNode, "tetgenUseSurface", "false")
-    self.setParameterIfNotDefined(parameterNode, "tetgenRatioParameter", "5")
-    self.setParameterIfNotDefined(parameterNode, "tetgenAngleParameter", "5")
-    self.setParameterIfNotDefined(parameterNode, "tetgenVolumeParameter", "5")
-    self.setParameterIfNotDefined(parameterNode, "tetGenAdditionalParameters", "")
-    self.setParameterIfNotDefined(parameterNode, "customTetGenPath", "")
-
-
   def setParameterIfNotDefined(self, parameterNode, key, value):
     if not parameterNode.GetParameter(key):
       parameterNode.SetParameter(key, value)
@@ -525,7 +450,7 @@ class SegmentMesherLogic(ScriptedLoadableModuleLogic):
       return self.cleaverPath
 
     for binDirCandidate in self.binDirCandidates:
-      cleaverPath = os.path.abspath(os.path.join(binDirCandidate, self.cleaverFilename))
+      cleaverPath = os.path.abspath(os.path.join(binDirCandidate, self.shapeworksFilename))
       logging.debug("Attempt to find executable at: "+cleaverPath)
       if os.path.isfile(cleaverPath):
         # found
@@ -534,34 +459,10 @@ class SegmentMesherLogic(ScriptedLoadableModuleLogic):
 
     raise ValueError('Cleaver not found')
 
-  def getTetGenPath(self):
-    if self.tetGenPath:
-      return self.tetGenPath
-
-    self.tetGenPath = self.getCustomTetGenPath()
-    if self.tetGenPath:
-      return self.tetGenPath
-
-    for tetGenBinDirCandidate in self.binDirCandidates:
-      tetGenPath = os.path.abspath(os.path.join(tetGenBinDirCandidate, self.tetGenFilename))
-      logging.debug("Attempt to find executable at: "+tetGenPath)
-      if os.path.isfile(tetGenPath):
-        # TetGen found
-        self.tetGenPath = tetGenPath
-        return self.tetGenPath
-
-    raise ValueError('TetGen not found')
-
   def getCustomCleaverPath(self):
     settings = qt.QSettings()
     if settings.contains(self.customCleaverPathSettingsKey):
       return settings.value(self.customCleaverPathSettingsKey)
-    return ''
-
-  def getCustomTetGenPath(self):
-    settings = qt.QSettings()
-    if settings.contains(self.customTetGenPathSettingsKey):
-      return settings.value(self.customTetGenPathSettingsKey)
     return ''
 
   def setCustomCleaverPath(self, customPath):
@@ -574,17 +475,6 @@ class SegmentMesherLogic(ScriptedLoadableModuleLogic):
     # Update Cleaver bin dir
     self.cleaverPath = None
     self.getCleaverPath()
-
-  def setCustomTetGenPath(self, customPath):
-    # don't save it if already saved
-    settings = qt.QSettings()
-    if settings.contains(self.customTetGenPathSettingsKey):
-      if customPath == settings.value(self.customTetGenPathSettingsKey):
-        return
-    settings.setValue(self.customTetGenPathSettingsKey, customPath)
-    # Update TetGen bin dir
-    self.tetGenPath = None
-    self.getTetGenPath()
 
   def startMesher(self, cmdLineArguments, executableFilePath):
     self.addLog("Generating volumetric mesh...")
@@ -627,7 +517,7 @@ class SegmentMesherLogic(ScriptedLoadableModuleLogic):
 
   def getTempDirectoryBase(self):
     tempDir = qt.QDir(slicer.app.temporaryPath)
-    fileInfo = qt.QFileInfo(qt.QDir(tempDir), "SegmentMesher")
+    fileInfo = qt.QFileInfo(qt.QDir(tempDir), "ShapeworksRunner")
     dirPath = fileInfo.absoluteFilePath()
     qt.QDir().mkpath(dirPath)
     return dirPath
@@ -738,7 +628,7 @@ class SegmentMesherLogic(ScriptedLoadableModuleLogic):
 
     # Run Cleaver
     ep = self.startMesher(inputParamsCleaver, self.getCleaverPath())
-    self.logProcessOutput(ep, self.cleaverFilename)
+    self.logProcessOutput(ep, self.shapeworksFilename)
 
     # Read results
     if not self.abortRequested:
@@ -813,92 +703,7 @@ class SegmentMesherLogic(ScriptedLoadableModuleLogic):
 
     self.addLog("Model generation is completed")
 
-  def createMeshFromSegmentationTetGen(self, inputSegmentation, outputMeshNode, segments = [], additionalParameters="", ratio=5, angle=0, volume=10):
-
-    segmentIdList = vtk.vtkStringArray()
-    for segment in segments:
-      segmentIdList.InsertNextValue(segment)
-
-    if segmentIdList.GetNumberOfValues() == 0:
-      logging.info("createMeshFromSegmentationTetGen skipped: there are no selected segments")
-      return
-    inputSegmentation.CreateClosedSurfaceRepresentation()
-    appender = vtk.vtkAppendPolyData()
-    for i in range(segmentIdList.GetNumberOfValues()):
-      segmentId = segmentIdList.GetValue(i)
-
-      #Use old function arguments for 4.10
-      if slicer.app.majorVersion == 4 and slicer.app.minorVersion < 11:
-        polydata = inputSegmentation.GetClosedSurfaceRepresentation(segmentId)
-      else:
-        polydata = vtk.vtkPolyData()
-        inputSegmentation.GetClosedSurfaceRepresentation(segmentId, polydata)
-      appender.AddInputData(polydata)
-
-    appender.Update()
-    self.createMeshFromPolyDataTetGen(appender.GetOutput(), outputMeshNode, additionalParameters, ratio, angle, volume)
-
-    #Clean up representation
-    inputSegmentation.GetSegmentation().RemoveRepresentation(slicer.vtkSegmentationConverter().GetClosedSurfaceRepresentationName())
-
-  def createMeshFromPolyDataTetGen(self, inputPolyData, outputMeshNode, additionalParameters="", ratio=5, angle=0, volume=10):
-
-    self.abortRequested = False
-    tempDir = self.createTempDirectory()
-    self.addLog('Mesh generation is started in working directory: '+tempDir)
-
-    # Write inputs
-    qt.QDir().mkpath(tempDir)
-
-    inputSurfaceMeshFilePath = os.path.join(tempDir, "mesh.ply")
-    inputWriter = vtk.vtkPLYWriter()
-    inputWriter.SetInputData(inputPolyData)
-    inputWriter.SetFileName(inputSurfaceMeshFilePath)
-    inputWriter.SetFileTypeToASCII()
-    inputWriter.Write()
-
-    #Command line for quality parameters
-    parameters = 'q'+"{:.2f}".format(ratio)+'/'+"{:.2f}".format(angle)+'a'+"{:.2f}".format(volume)
-
-    inputParamsTetGen = []
-    inputParamsTetGen.append("-k"+parameters+additionalParameters)
-    inputParamsTetGen.append(inputSurfaceMeshFilePath)
-
-    # Run tetgen
-    ep = self.startMesher(inputParamsTetGen, self.getTetGenPath())
-    self.logProcessOutput(ep, self.tetGenFilename)
-
-    # Read results
-    if not self.abortRequested:
-      outputVolumetricMeshPath = os.path.join(tempDir, "mesh.1.vtk")
-      outputReader = vtk.vtkUnstructuredGridReader()
-      outputReader.SetFileName(outputVolumetricMeshPath)
-      outputReader.ReadAllScalarsOn()
-      outputReader.ReadAllVectorsOn()
-      outputReader.ReadAllNormalsOn()
-      outputReader.ReadAllTensorsOn()
-      outputReader.ReadAllColorScalarsOn()
-      outputReader.ReadAllTCoordsOn()
-      outputReader.ReadAllFieldsOn()
-      outputReader.Update()
-      outputMeshNode.SetUnstructuredGridConnection(outputReader.GetOutputPort())
-
-      outputMeshDisplayNode = outputMeshNode.GetDisplayNode()
-      if not outputMeshDisplayNode:
-        # Initial setup of display node
-        outputMeshNode.CreateDefaultDisplayNodes()
-        outputMeshDisplayNode = outputMeshNode.GetDisplayNode()
-        outputMeshDisplayNode.SetEdgeVisibility(True)
-        outputMeshDisplayNode.SetClipping(True)
-
-    # Clean up
-    if self.deleteTemporaryFiles:
-      import shutil
-      shutil.rmtree(tempDir)
-
-    self.addLog("Model generation is completed")
-
-class SegmentMesherTest(ScriptedLoadableModuleTest):
+class ShapeworksRunnerTest(ScriptedLoadableModuleTest):
   """
   This is the test case for your scripted module.
   Uses ScriptedLoadableModuleTest base class, available at:
@@ -914,9 +719,9 @@ class SegmentMesherTest(ScriptedLoadableModuleTest):
     """Run as few or as many tests as needed here.
     """
     self.setUp()
-    self.test_TetGen1()
+    self.test_TODO()
 
-  def test_TetGen1(self):
+  def test_TODO(self):
     """ Ideally you should have several levels of tests.  At the lowest level
     tests should exercise the functionality of the logic with different inputs
     (both valid and invalid).  At higher levels your tests should emulate the
@@ -939,8 +744,9 @@ class SegmentMesherTest(ScriptedLoadableModuleTest):
     outputModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
     outputModelNode.CreateDefaultDisplayNodes()
 
-    logic = SegmentMesherLogic()
-    logic.createMeshFromPolyDataTetGen(inputModelNode.GetPolyData(), outputModelNode, '', 100, 0, 100)
+    logic = ShapeworksRunnerLogic()
+    self.assertTrue(False)
+    #logic.createMeshFromPolyDataTODO(inputModelNode.GetPolyData(), outputModelNode, '', 100, 0, 100)
 
     self.assertTrue(outputModelNode.GetMesh().GetNumberOfPoints()>0)
     self.assertTrue(outputModelNode.GetMesh().GetNumberOfCells()>0)
@@ -958,4 +764,3 @@ class SegmentMesherTest(ScriptedLoadableModuleTest):
     self.delayDisplay('Test passed!')
 
 METHOD_CLEAVER = 'CLEAVER'
-METHOD_TETGEN = 'TETGEN'
