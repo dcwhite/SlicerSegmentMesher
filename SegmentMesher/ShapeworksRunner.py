@@ -67,8 +67,8 @@ class ShapeworksRunnerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.ui.methodSelectorComboBox.addItem("Cleaver", METHOD_CLEAVER)
 
-    customCleaverPath = self.logic.getCustomCleaverPath()
-    self.ui.customShapeworksPathSelector.setCurrentPath(customCleaverPath)
+    customShapeworksPath = self.logic.getCustomShapeworksPath()
+    self.ui.customShapeworksPathSelector.setCurrentPath(customShapeworksPath)
     self.ui.customShapeworksPathSelector.nameFilters = [self.logic.shapeworksFilename]
 
     clipNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLClipModelsNode")
@@ -224,7 +224,7 @@ class ShapeworksRunnerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.cleaverAdditionalParametersWidget.text = self._parameterNode.GetParameter("cleaverAdditionalParameters")
     self.ui.cleaverRemoveBackgroundMeshCheckBox.checked = (self._parameterNode.GetParameter("cleaverRemoveBackgroundMesh") == "true")
     self.ui.cleaverPaddingPercentSpinBox.value = int(self._parameterNode.GetParameter("cleaverPaddingPercent"))
-    self.ui.customShapeworksPathSelector.setCurrentPath(self._parameterNode.GetParameter("customCleaverPath"))
+    self.ui.customShapeworksPathSelector.setCurrentPath(self._parameterNode.GetParameter("customShapeworksPath"))
 
     # Update buttons states and tooltips
     self.updateMRMLFromGUI()
@@ -260,7 +260,7 @@ class ShapeworksRunnerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._parameterNode.SetParameter("cleaverAdditionalParameters", self.ui.cleaverAdditionalParametersWidget.text)
     self._parameterNode.SetParameter("cleaverRemoveBackgroundMesh", "true" if self.ui.cleaverRemoveBackgroundMeshCheckBox.checked else "false")
     self._parameterNode.SetParameter("cleaverPaddingPercent", str(self.ui.cleaverPaddingPercentSpinBox.value))
-    self._parameterNode.SetParameter("customCleaverPath", self.ui.customShapeworksPathSelector.currentPath)
+    self._parameterNode.SetParameter("customShapeworksPath", self.ui.customShapeworksPathSelector.currentPath)
 
     self._parameterNode.EndModify(wasModified)
 
@@ -297,18 +297,18 @@ class ShapeworksRunnerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.CleaverParametersGroupBox.visible = (method == METHOD_CLEAVER)
 
 
-    if not self.ui.inputSegmentationSelector.currentNode():
-      self.ui.applyButton.text = "Select input segmentation"
-      self.ui.applyButton.enabled = False
-    elif not self.ui.outputModelSelector.currentNode():
-      self.ui.applyButton.text = "Select an output model node"
-      self.ui.applyButton.enabled = False
-    elif self.ui.inputSegmentationSelector.currentNode() == self.ui.outputModelSelector.currentNode():
-      self.ui.applyButton.text = "Choose different Output model"
-      self.ui.applyButton.enabled = False
-    else:
-      self.ui.applyButton.text = "Apply"
-      self.ui.applyButton.enabled = True
+    # if not self.ui.inputSegmentationSelector.currentNode():
+    #   self.ui.applyButton.text = "Select input segmentation"
+    #   self.ui.applyButton.enabled = False
+    # elif not self.ui.outputModelSelector.currentNode():
+    #   self.ui.applyButton.text = "Select an output model node"
+    #   self.ui.applyButton.enabled = False
+    # elif self.ui.inputSegmentationSelector.currentNode() == self.ui.outputModelSelector.currentNode():
+    #   self.ui.applyButton.text = "Choose different Output model"
+    #   self.ui.applyButton.enabled = False
+    # else:
+    #   self.ui.applyButton.text = "Apply"
+    #   self.ui.applyButton.enabled = True
 
     self.updateParameterNodeFromGUI()
 
@@ -340,7 +340,9 @@ class ShapeworksRunnerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.statusLabel.plainText = ''
     slicer.app.setOverrideCursor(qt.Qt.WaitCursor)
     try:
-      self.logic.setCustomCleaverPath(self.ui.customShapeworksPathSelector.currentPath)
+      self.logic.setCustomShapeworksPath(self.ui.customShapeworksPathSelector.currentPath)
+      self.addLog("onApplyButton done.")
+      return
 
       self.logic.deleteTemporaryFiles = not self.ui.keepTemporaryFilesCheckBox.checked
       self.logic.logStandardOutput = self.ui.showDetailedLogDuringExecutionCheckBox.checked
@@ -397,10 +399,10 @@ class ShapeworksRunnerLogic(ScriptedLoadableModuleLogic):
     self.abortRequested = False
     self.deleteTemporaryFiles = True
     self.logStandardOutput = False
-    self.customCleaverPathSettingsKey = 'ShapeworksRunner/CustomShapeworksPath'
+    self.customShapeworksPathSettingsKey = 'ShapeworksRunner/CustomShapeworksPath'
     import os
     self.scriptPath = os.path.dirname(os.path.abspath(__file__))
-    self.cleaverPath = None # this will be determined dynamically
+    self.shapeworksPath = None # this will be determined dynamically
 
     import platform
     executableExt = '.exe' if platform.system() == 'Windows' else ''
@@ -430,7 +432,7 @@ class ShapeworksRunnerLogic(ScriptedLoadableModuleLogic):
     self.setParameterIfNotDefined(parameterNode, "cleaverAdditionalParameters", "")
     self.setParameterIfNotDefined(parameterNode, "cleaverRemoveBackgroundMesh", "true")
     self.setParameterIfNotDefined(parameterNode, "cleaverPaddingPercent", "10")
-    self.setParameterIfNotDefined(parameterNode, "customCleaverPath", "")
+    self.setParameterIfNotDefined(parameterNode, "customShapeworksPath", "")
 
   def setParameterIfNotDefined(self, parameterNode, key, value):
     if not parameterNode.GetParameter(key):
@@ -441,40 +443,42 @@ class ShapeworksRunnerLogic(ScriptedLoadableModuleLogic):
     if self.logCallback:
       self.logCallback(text)
 
-  def getCleaverPath(self):
-    if self.cleaverPath:
-      return self.cleaverPath
+  def getShapeworksPath(self):
+    if self.shapeworksPath:
+      return self.shapeworksPath
 
-    self.cleaverPath = self.getCustomCleaverPath()
-    if self.cleaverPath:
-      return self.cleaverPath
+    self.shapeworksPath = self.getCustomShapeworksPath()
+    if self.shapeworksPath:
+      return self.shapeworksPath
 
     for binDirCandidate in self.binDirCandidates:
-      cleaverPath = os.path.abspath(os.path.join(binDirCandidate, self.shapeworksFilename))
-      logging.debug("Attempt to find executable at: "+cleaverPath)
-      if os.path.isfile(cleaverPath):
+      shapeworksPath = os.path.abspath(os.path.join(binDirCandidate, self.shapeworksFilename))
+      logging.debug("Attempt to find executable at: "+shapeworksPath)
+      if os.path.isfile(shapeworksPath):
         # found
-        self.cleaverPath = cleaverPath
-        return self.cleaverPath
+        self.shapeworksPath = shapeworksPath
+        return self.shapeworksPath
 
-    raise ValueError('Cleaver not found')
+    raise ValueError('Shapeworks not found')
 
-  def getCustomCleaverPath(self):
+  def getCustomShapeworksPath(self):
     settings = qt.QSettings()
-    if settings.contains(self.customCleaverPathSettingsKey):
-      return settings.value(self.customCleaverPathSettingsKey)
+    if settings.contains(self.customShapeworksPathSettingsKey):
+      self.addLog("getCustomShapeworksPath: " + settings.value(self.customShapeworksPathSettingsKey))
+      return settings.value(self.customShapeworksPathSettingsKey)
     return ''
 
-  def setCustomCleaverPath(self, customPath):
+  def setCustomShapeworksPath(self, customPath):
     # don't save it if already saved
     settings = qt.QSettings()
-    if settings.contains(self.customCleaverPathSettingsKey):
-      if customPath == settings.value(self.customCleaverPathSettingsKey):
+    self.addLog("setCustomShapeworksPath")
+    if settings.contains(self.customShapeworksPathSettingsKey):
+      if customPath == settings.value(self.customShapeworksPathSettingsKey):
         return
-    settings.setValue(self.customCleaverPathSettingsKey, customPath)
+    settings.setValue(self.customShapeworksPathSettingsKey, customPath)
     # Update Cleaver bin dir
-    self.cleaverPath = None
-    self.getCleaverPath()
+    self.shapeworksPath = None
+    self.getShapeworksPath()
 
   def startMesher(self, cmdLineArguments, executableFilePath):
     self.addLog("Generating volumetric mesh...")
@@ -627,7 +631,7 @@ class ShapeworksRunnerLogic(ScriptedLoadableModuleLogic):
       inputParamsCleaver.extend(additionalParameters.split(' '))
 
     # Run Cleaver
-    ep = self.startMesher(inputParamsCleaver, self.getCleaverPath())
+    ep = self.startMesher(inputParamsCleaver, self.getShapeworksPath())
     self.logProcessOutput(ep, self.shapeworksFilename)
 
     # Read results
