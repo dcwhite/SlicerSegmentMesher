@@ -341,8 +341,6 @@ class ShapeworksRunnerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     slicer.app.setOverrideCursor(qt.Qt.WaitCursor)
     try:
       self.logic.setCustomShapeworksPath(self.ui.customShapeworksPathSelector.currentPath)
-      self.addLog("onApplyButton done.")
-      return
 
       self.logic.deleteTemporaryFiles = not self.ui.keepTemporaryFilesCheckBox.checked
       self.logic.logStandardOutput = self.ui.showDetailedLogDuringExecutionCheckBox.checked
@@ -356,12 +354,10 @@ class ShapeworksRunnerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       for index in segmentIndexes:
         segments.append(self.ui.segmentSelectorCombBox.itemText(index.row()))
 
-      print(method)
-      if method == METHOD_CLEAVER:
-        self.logic.createMeshFromSegmentationCleaver(self.ui.inputSegmentationSelector.currentNode(),
-          self.ui.outputModelSelector.currentNode(), segments, self.ui.cleaverAdditionalParametersWidget.text,
-          self.ui.cleaverRemoveBackgroundMeshCheckBox.isChecked(),
-          self.ui.cleaverPaddingPercentSpinBox.value * 0.01, self.ui.cleaverFeatureScalingParameterWidget.value, self.ui.cleaverSamplingParameterWidget.value, self.ui.cleaverRateParameterWidget.value)
+      self.logic.createMeshFromSegmentationCleaver(self.ui.inputSegmentationSelector.currentNode(),
+        self.ui.outputModelSelector.currentNode(), segments, self.ui.cleaverAdditionalParametersWidget.text,
+        self.ui.cleaverRemoveBackgroundMeshCheckBox.isChecked(),
+        self.ui.cleaverPaddingPercentSpinBox.value * 0.01, self.ui.cleaverFeatureScalingParameterWidget.value, self.ui.cleaverSamplingParameterWidget.value, self.ui.cleaverRateParameterWidget.value)
 
     except Exception as e:
       print(e)
@@ -471,7 +467,6 @@ class ShapeworksRunnerLogic(ScriptedLoadableModuleLogic):
   def setCustomShapeworksPath(self, customPath):
     # don't save it if already saved
     settings = qt.QSettings()
-    self.addLog("setCustomShapeworksPath")
     if settings.contains(self.customShapeworksPathSettingsKey):
       if customPath == settings.value(self.customShapeworksPathSettingsKey):
         return
@@ -480,8 +475,8 @@ class ShapeworksRunnerLogic(ScriptedLoadableModuleLogic):
     self.shapeworksPath = None
     self.getShapeworksPath()
 
-  def startMesher(self, cmdLineArguments, executableFilePath):
-    self.addLog("Generating volumetric mesh...")
+  def runShapeworks(self, cmdLineArguments, executableFilePath):
+    self.addLog("Running Shapeworks...")
     import subprocess
 
     # Hide console window on Windows
@@ -493,7 +488,7 @@ class ShapeworksRunnerLogic(ScriptedLoadableModuleLogic):
     else:
       info = None
 
-    logging.info("Generate mesh using: "+executableFilePath+": "+repr(cmdLineArguments))
+    self.addLog("Generate mesh using: "+executableFilePath+": "+repr(cmdLineArguments))
     return subprocess.Popen([executableFilePath] + cmdLineArguments,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True, startupinfo=info)
 
@@ -544,7 +539,7 @@ class ShapeworksRunnerLogic(ScriptedLoadableModuleLogic):
 
     self.abortRequested = False
     tempDir = self.createTempDirectory()
-    self.addLog('Mesh generation using Cleaver is started in working directory: '+tempDir)
+    self.addLog('Shapeworks is started in working directory: '+tempDir)
 
     inputParamsCleaver = []
 
@@ -554,63 +549,64 @@ class ShapeworksRunnerLogic(ScriptedLoadableModuleLogic):
     # Create temporary labelmap node. It will be used both for storing reference geometry
     # and resulting merged labelmap.
     labelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLabelMapVolumeNode')
-    parentTransformNode  = inputSegmentation.GetParentTransformNode()
-    labelmapVolumeNode.SetAndObserveTransformNodeID(parentTransformNode.GetID() if parentTransformNode else None)
+    if False:
+      parentTransformNode  = inputSegmentation.GetParentTransformNode()
+      labelmapVolumeNode.SetAndObserveTransformNodeID(parentTransformNode.GetID() if parentTransformNode else None)
 
-    # Create binary labelmap representation using default parameters
-    if not inputSegmentation.GetSegmentation().CreateRepresentation(slicer.vtkSegmentationConverter.GetSegmentationBinaryLabelmapRepresentationName()):
-      self.addLog('Failed to create binary labelmap representation')
-      return
+      # Create binary labelmap representation using default parameters
+      if not inputSegmentation.GetSegmentation().CreateRepresentation(slicer.vtkSegmentationConverter.GetSegmentationBinaryLabelmapRepresentationName()):
+        self.addLog('Failed to create binary labelmap representation')
+        return
 
-    # Set reference geometry in labelmapVolumeNode
-    referenceGeometry_Segmentation = slicer.vtkOrientedImageData()
-    inputSegmentation.GetSegmentation().SetImageGeometryFromCommonLabelmapGeometry(referenceGeometry_Segmentation, None,
-      slicer.vtkSegmentation.EXTENT_REFERENCE_GEOMETRY)
-    slicer.modules.segmentations.logic().CopyOrientedImageDataToVolumeNode(referenceGeometry_Segmentation, labelmapVolumeNode)
+      # Set reference geometry in labelmapVolumeNode
+      referenceGeometry_Segmentation = slicer.vtkOrientedImageData()
+      inputSegmentation.GetSegmentation().SetImageGeometryFromCommonLabelmapGeometry(referenceGeometry_Segmentation, None,
+        slicer.vtkSegmentation.EXTENT_REFERENCE_GEOMETRY)
+      slicer.modules.segmentations.logic().CopyOrientedImageDataToVolumeNode(referenceGeometry_Segmentation, labelmapVolumeNode)
 
-    # Add margin
-    extent = labelmapVolumeNode.GetImageData().GetExtent()
-    paddedExtent = [0, -1, 0, -1, 0, -1]
-    for axisIndex in range(3):
-      paddingSizeVoxels = int((extent[axisIndex * 2 + 1] - extent[axisIndex * 2]) * paddingRatio)
-      paddedExtent[axisIndex * 2] = extent[axisIndex * 2] - paddingSizeVoxels
-      paddedExtent[axisIndex * 2 + 1] = extent[axisIndex * 2 + 1] + paddingSizeVoxels
-    labelmapVolumeNode.GetImageData().SetExtent(paddedExtent)
-    labelmapVolumeNode.ShiftImageDataExtentToZeroStart()
+      # Add margin
+      extent = labelmapVolumeNode.GetImageData().GetExtent()
+      paddedExtent = [0, -1, 0, -1, 0, -1]
+      for axisIndex in range(3):
+        paddingSizeVoxels = int((extent[axisIndex * 2 + 1] - extent[axisIndex * 2]) * paddingRatio)
+        paddedExtent[axisIndex * 2] = extent[axisIndex * 2] - paddingSizeVoxels
+        paddedExtent[axisIndex * 2 + 1] = extent[axisIndex * 2 + 1] + paddingSizeVoxels
+      labelmapVolumeNode.GetImageData().SetExtent(paddedExtent)
+      labelmapVolumeNode.ShiftImageDataExtentToZeroStart()
 
-    # Get merged labelmap
-    segmentIdList = vtk.vtkStringArray()
+      # Get merged labelmap
+      segmentIdList = vtk.vtkStringArray()
 
-    for segment in segments:
-      segmentIdList.InsertNextValue(segment)
+      for segment in segments:
+        segmentIdList.InsertNextValue(segment)
 
-    if segmentIdList.GetNumberOfValues() == 0:
-      self.addLog("No input segments are selected, therefore no output is generated.")
-      return
+      if segmentIdList.GetNumberOfValues() == 0:
+        self.addLog("No input segments are selected, therefore no output is generated.")
+        return
 
-    slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(inputSegmentation, segmentIdList, labelmapVolumeNode, labelmapVolumeNode)
+      slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(inputSegmentation, segmentIdList, labelmapVolumeNode, labelmapVolumeNode)
 
 
-    inputLabelmapVolumeFilePath = os.path.join(tempDir, "inputLabelmap.nrrd")
-    slicer.util.saveNode(labelmapVolumeNode, inputLabelmapVolumeFilePath, {"useCompression": False})
-    inputParamsCleaver.extend(["--input_files", inputLabelmapVolumeFilePath])
+      inputLabelmapVolumeFilePath = os.path.join(tempDir, "inputLabelmap.nrrd")
+      slicer.util.saveNode(labelmapVolumeNode, inputLabelmapVolumeFilePath, {"useCompression": False})
+      inputParamsCleaver.extend(["--input_files", inputLabelmapVolumeFilePath])
 
-    # Keep IJK to RAS matrix, we'll need it later
-    unscaledIjkToRasMatrix = vtk.vtkMatrix4x4()
-    labelmapVolumeNode.GetIJKToRASDirectionMatrix(unscaledIjkToRasMatrix)  # axis directions, without scaling by spacing
-    ijkToRasMatrix = vtk.vtkMatrix4x4()
-    labelmapVolumeNode.GetIJKToRASMatrix(ijkToRasMatrix)
-    origin = ijkToRasMatrix.MultiplyPoint([-0.5, -0.5, -0.5, 1.0])  # Cleaver uses the voxel corner as its origin, therefore we need a half-voxel offset
-    for i in range(3):
-      unscaledIjkToRasMatrix.SetElement(i,3, origin[i])
+      # Keep IJK to RAS matrix, we'll need it later
+      unscaledIjkToRasMatrix = vtk.vtkMatrix4x4()
+      labelmapVolumeNode.GetIJKToRASDirectionMatrix(unscaledIjkToRasMatrix)  # axis directions, without scaling by spacing
+      ijkToRasMatrix = vtk.vtkMatrix4x4()
+      labelmapVolumeNode.GetIJKToRASMatrix(ijkToRasMatrix)
+      origin = ijkToRasMatrix.MultiplyPoint([-0.5, -0.5, -0.5, 1.0])  # Cleaver uses the voxel corner as its origin, therefore we need a half-voxel offset
+      for i in range(3):
+        unscaledIjkToRasMatrix.SetElement(i,3, origin[i])
 
-    # Keep color node, we'll need it later
-    colorTableNode = labelmapVolumeNode.GetDisplayNode().GetColorNode()
-    # Background color is transparent by default which is not ideal for 3D display
-    colorTableNode.SetColor(0,0.6,0.6,0.6,1.0)
+      # Keep color node, we'll need it later
+      colorTableNode = labelmapVolumeNode.GetDisplayNode().GetColorNode()
+      # Background color is transparent by default which is not ideal for 3D display
+      colorTableNode.SetColor(0,0.6,0.6,0.6,1.0)
 
-    slicer.mrmlScene.RemoveNode(labelmapVolumeNode)
-    slicer.mrmlScene.RemoveNode(colorTableNode)
+      slicer.mrmlScene.RemoveNode(labelmapVolumeNode)
+      slicer.mrmlScene.RemoveNode(colorTableNode)
 
     #User set parameters
     inputParamsCleaver.extend(["--feature_scaling", "{:.2f}".format(featureScale)])
@@ -631,7 +627,7 @@ class ShapeworksRunnerLogic(ScriptedLoadableModuleLogic):
       inputParamsCleaver.extend(additionalParameters.split(' '))
 
     # Run Cleaver
-    ep = self.startMesher(inputParamsCleaver, self.getShapeworksPath())
+    ep = self.runShapeworks(inputParamsCleaver, self.getShapeworksPath())
     self.logProcessOutput(ep, self.shapeworksFilename)
 
     # Read results
