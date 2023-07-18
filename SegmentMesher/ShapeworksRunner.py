@@ -65,8 +65,6 @@ class ShapeworksRunnerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.inputModelSelector.setMRMLScene( slicer.mrmlScene )
     self.ui.outputModelSelector.setMRMLScene( slicer.mrmlScene )
 
-    self.ui.methodSelectorComboBox.addItem("Cleaver", METHOD_CLEAVER)
-
     customShapeworksPath = self.logic.getCustomShapeworksPath()
     self.ui.customShapeworksPathSelector.setCurrentPath(customShapeworksPath)
     self.ui.customShapeworksPathSelector.nameFilters = [self.logic.shapeworksFilename]
@@ -84,16 +82,20 @@ class ShapeworksRunnerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.inputSegmentationSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateMRMLFromGUI)
     self.ui.inputModelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateMRMLFromGUI)
     self.ui.outputModelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateMRMLFromGUI)
-    self.ui.methodSelectorComboBox.connect("currentIndexChanged(int)", self.updateMRMLFromGUI)
     # Immediately update deleteTemporaryFiles in the logic to make it possible to decide to
     # keep the temporary file while the model generation is running
     self.ui.keepTemporaryFilesCheckBox.connect("toggled(bool)", self.onKeepTemporaryFilesToggled)
+
+    # Shapeworks steps
+    self.ui.generateProjectPushButton_.connect("clicked(bool)", self.generateShapeworksProjectJson)
+    self.ui.groomPushButton_.connect("clicked(bool)", self.groomShapeworksProject)
+    self.ui.optimizePushButton_.connect("clicked(bool)", self.optimizeShapeworksProject)
+    self.ui.loadResultsPushButton_.connect("clicked(bool)", self.loadResultsOfShapeworksProject)
 
     #Parameter node connections
     self.ui.inputSegmentationSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
     self.ui.inputModelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
     self.ui.outputModelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-    self.ui.methodSelectorComboBox.connect("currentIndexChanged(int)", self.updateParameterNodeFromGUI)
 
 
     self.ui.showDetailedLogDuringExecutionCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
@@ -213,7 +215,6 @@ class ShapeworksRunnerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.inputSegmentationSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputSegmentation"))
     self.ui.inputModelSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputSurface"))
     self.ui.outputModelSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputModel"))
-    self.ui.methodSelectorComboBox.setCurrentText(self._parameterNode.GetParameter("Method"))
 
     self.ui.showDetailedLogDuringExecutionCheckBox.checked = (self._parameterNode.GetParameter("showDetailedLogDuringExecution") == "true")
     self.ui.keepTemporaryFilesCheckBox.checked = (self._parameterNode.GetParameter("keepTemporaryFiles") == "true")
@@ -247,7 +248,6 @@ class ShapeworksRunnerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._parameterNode.SetNodeReferenceID("InputSegmentation", self.ui.inputSegmentationSelector.currentNodeID)
     self._parameterNode.SetNodeReferenceID("InputSurface", self.ui.inputModelSelector.currentNodeID)
     self._parameterNode.SetNodeReferenceID("OutputModel", self.ui.outputModelSelector.currentNodeID)
-    self._parameterNode.SetParameter("Method", self.ui.methodSelectorComboBox.currentText)
 
     #General parameters
     self._parameterNode.SetParameter("showDetailedLogDuringExecution", "true" if self.ui.showDetailedLogDuringExecutionCheckBox.checked else "false")
@@ -265,8 +265,6 @@ class ShapeworksRunnerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._parameterNode.EndModify(wasModified)
 
   def updateMRMLFromGUI(self):
-
-    method = self.ui.methodSelectorComboBox.itemData(self.ui.methodSelectorComboBox.currentIndex)
 
     #Enable correct input selections
     inputIsModel = False
@@ -294,38 +292,34 @@ class ShapeworksRunnerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       for index in oldIndex:
         self.ui.segmentSelectorCombBox.setCheckState(index, qt.Qt.Checked)
 
-    self.ui.CleaverParametersGroupBox.visible = (method == METHOD_CLEAVER)
-
-
-    # if not self.ui.inputSegmentationSelector.currentNode():
-    #   self.ui.applyButton.text = "Select input segmentation"
-    #   self.ui.applyButton.enabled = False
-    # elif not self.ui.outputModelSelector.currentNode():
-    #   self.ui.applyButton.text = "Select an output model node"
-    #   self.ui.applyButton.enabled = False
-    # elif self.ui.inputSegmentationSelector.currentNode() == self.ui.outputModelSelector.currentNode():
-    #   self.ui.applyButton.text = "Choose different Output model"
-    #   self.ui.applyButton.enabled = False
-    # else:
-    #   self.ui.applyButton.text = "Apply"
-    #   self.ui.applyButton.enabled = True
-
     self.updateParameterNodeFromGUI()
 
 
   # def updateGUIFromMRML(self):
     # parameterNode = self.parameterNodeSelector.currentNode()
-    # method = parameterNode.parameter("Method")
-    # methodIndex = self.methodSelectorComboBox.findData(method)
-    # wasBlocked = self.methodSelectorComboBox.blockSignals(True)
-    # self.methodSelectorComboBox.setCurrentIndex(methodIndex)
-    # self.methodSelectorComboBox.blockSignals(wasBlocked)
 
   def onShowTemporaryFilesFolder(self):
     qt.QDesktopServices().openUrl(qt.QUrl("file:///" + self.logic.getTempDirectoryBase(), qt.QUrl.TolerantMode));
 
   def onKeepTemporaryFilesToggled(self, toggle):
     self.logic.deleteTemporaryFiles = toggle
+
+  def generateShapeworksProjectJson(self, toggle):
+    print("generateShapeworksProjectJson {0}".format(toggle))
+    self.addLog("generateShapeworksProjectJson {0}".format(toggle))
+
+  def groomShapeworksProject(self, toggle):
+    groomCmd = "groomShapeworksProject: {0} --name=\"project_file\" --progress".format(self.logic.shapeworksPath)
+    print(groomCmd)
+    self.addLog(groomCmd)
+
+  def optimizeShapeworksProject(self, toggle):
+    print("optimizeShapeworksProject")
+    self.addLog("optimizeShapeworksProject")
+
+  def loadResultsOfShapeworksProject(self, toggle):
+    print("loadResultsOfShapeworksProject")
+    self.addLog("loadResultsOfShapeworksProject")
 
   def onApplyButton(self):
     if self.modelGenerationInProgress:
@@ -340,12 +334,10 @@ class ShapeworksRunnerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.statusLabel.plainText = ''
     slicer.app.setOverrideCursor(qt.Qt.WaitCursor)
     try:
-      self.logic.setCustomShapeworksPath(self.ui.customShapeworksPathSelector.currentPath)
+      #self.logic.setCustomShapeworksPath(self.ui.customShapeworksPathSelector.currentPath)
 
       self.logic.deleteTemporaryFiles = not self.ui.keepTemporaryFilesCheckBox.checked
       self.logic.logStandardOutput = self.ui.showDetailedLogDuringExecutionCheckBox.checked
-
-      method = self.ui.methodSelectorComboBox.itemData(self.ui.methodSelectorComboBox.currentIndex)
 
       #Get list of segments to mesh
       segmentIndexes = self.ui.segmentSelectorCombBox.checkedIndexes()
@@ -398,7 +390,7 @@ class ShapeworksRunnerLogic(ScriptedLoadableModuleLogic):
     self.customShapeworksPathSettingsKey = 'ShapeworksRunner/CustomShapeworksPath'
     import os
     self.scriptPath = os.path.dirname(os.path.abspath(__file__))
-    self.shapeworksPath = None # this will be determined dynamically
+    self.shapeworksPath = "/Applications/ShapeWorks/bin/shapeworks" # this will be determined dynamically
 
     import platform
     executableExt = '.exe' if platform.system() == 'Windows' else ''
@@ -586,7 +578,6 @@ class ShapeworksRunnerLogic(ScriptedLoadableModuleLogic):
 
       slicer.modules.segmentations.logic().ExportSegmentsToLabelmapNode(inputSegmentation, segmentIdList, labelmapVolumeNode, labelmapVolumeNode)
 
-
       inputLabelmapVolumeFilePath = os.path.join(tempDir, "inputLabelmap.nrrd")
       slicer.util.saveNode(labelmapVolumeNode, inputLabelmapVolumeFilePath, {"useCompression": False})
       inputParamsCleaver.extend(["--input_files", inputLabelmapVolumeFilePath])
@@ -745,7 +736,7 @@ class ShapeworksRunnerTest(ScriptedLoadableModuleTest):
     outputModelNode.CreateDefaultDisplayNodes()
 
     logic = ShapeworksRunnerLogic()
-    self.assertTrue(False)
+    self.assertTrue(0)
     #logic.createMeshFromPolyDataTODO(inputModelNode.GetPolyData(), outputModelNode, '', 100, 0, 100)
 
     self.assertTrue(outputModelNode.GetMesh().GetNumberOfPoints()>0)
