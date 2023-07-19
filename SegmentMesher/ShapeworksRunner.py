@@ -309,13 +309,17 @@ class ShapeworksRunnerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.addLog("generateShapeworksProjectJson {0}".format(toggle))
 
   def groomShapeworksProject(self, toggle):
-    groomCmd = "groomShapeworksProject: {0} --name=\"project_file\" --progress".format(self.logic.shapeworksPath)
+    inputParams = ["groom", "--name={0}".format(self.logic.projectFileName), "--progress"]
+    groomCmd = "groomShapeworksProject: {0} {1}".format(self.logic.shapeworksPath, repr(inputParams))
     print(groomCmd)
     self.addLog(groomCmd)
+    ep = self.logic.runShapeworks(inputParams, self.logic.getShapeworksPath())
+    self.logic.logProcessOutput(ep, self.logic.shapeworksFilename)
 
   def optimizeShapeworksProject(self, toggle):
-    print("optimizeShapeworksProject")
-    self.addLog("optimizeShapeworksProject")
+    optimizeCmd = "optimizeShapeworksProject: {0} optimize --name=\"project_file\"".format(self.logic.shapeworksPath)
+    print(optimizeCmd)
+    self.addLog(optimizeCmd)
 
   def loadResultsOfShapeworksProject(self, toggle):
     print("loadResultsOfShapeworksProject")
@@ -391,6 +395,7 @@ class ShapeworksRunnerLogic(ScriptedLoadableModuleLogic):
     import os
     self.scriptPath = os.path.dirname(os.path.abspath(__file__))
     self.shapeworksPath = "/Applications/ShapeWorks/bin/shapeworks" # this will be determined dynamically
+    self.projectFileName = "/Users/DanSCI/dev/swEx/Studio/Ellipsoid/ellipsoidJsonTest.swproj" # DANTODO: generate
 
     import platform
     executableExt = '.exe' if platform.system() == 'Windows' else ''
@@ -480,7 +485,7 @@ class ShapeworksRunnerLogic(ScriptedLoadableModuleLogic):
     else:
       info = None
 
-    self.addLog("Generate mesh using: "+executableFilePath+": "+repr(cmdLineArguments))
+    self.addLog("Running Shapeworks using: "+executableFilePath+": "+repr(cmdLineArguments))
     return subprocess.Popen([executableFilePath] + cmdLineArguments,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True, startupinfo=info)
 
