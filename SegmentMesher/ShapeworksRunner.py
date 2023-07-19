@@ -79,7 +79,8 @@ class ShapeworksRunnerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # connections
     self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
     self.ui.showTemporaryFilesFolderButton.connect('clicked(bool)', self.onShowTemporaryFilesFolder)
-    self.ui.inputSegmentationSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateMRMLFromGUI)
+    #self.ui.inputSegmentationSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateMRMLFromGUI)
+    self.ui.inputSegmentationSelector.connect("checkedNodesChanged()", self.updateMRMLFromGUI)
     self.ui.inputModelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateMRMLFromGUI)
     self.ui.outputModelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateMRMLFromGUI)
     # Immediately update deleteTemporaryFiles in the logic to make it possible to decide to
@@ -266,6 +267,7 @@ class ShapeworksRunnerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def updateMRMLFromGUI(self):
 
+    print("\nupdateMRMLFromGUI")
     #Enable correct input selections
     inputIsModel = False
     self.ui.inputSegmentationLabel.visible = not inputIsModel
@@ -276,21 +278,32 @@ class ShapeworksRunnerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.inputModelSelector.visible = inputIsModel
     self.ui.segmentSelectorCombBox.enabled = self.ui.inputSegmentationSelector.currentNode() is not None
 
-    #populate segments
-    inputSeg = self.ui.inputSegmentationSelector.currentNode()
-    oldIndex = self.ui.segmentSelectorCombBox.checkedIndexes()
-    oldCount = self.ui.segmentSelectorCombBox.count
+    print("clearing segmentSelectorCombBox")
     self.ui.segmentSelectorCombBox.clear()
-    if inputSeg is not None:
-      segmentIDs = vtk.vtkStringArray()
-      inputSeg.GetSegmentation().GetSegmentIDs(segmentIDs)
-      for index in range(0, segmentIDs.GetNumberOfValues()):
-        self.ui.segmentSelectorCombBox.addItem(segmentIDs.GetValue(index))
+    #oldIndex = self.ui.segmentSelectorCombBox.checkedIndexes()
+    #oldCount = self.ui.segmentSelectorCombBox.count
+
+    for j in range(0, self.ui.inputSegmentationSelector.nodeCount()):
+      node = self.ui.inputSegmentationSelector.nodeFromIndex(j)
+      print(node.GetName())
+      print(self.ui.inputSegmentationSelector.checkState(node))
+
+    #populate segments
+    for inputSeg in self.ui.inputSegmentationSelector.checkedNodes():
+      print(inputSeg.GetName())
+
+      if inputSeg is not None:
+        segmentIDs = vtk.vtkStringArray()
+        inputSeg.GetSegmentation().GetSegmentIDs(segmentIDs)
+        print(segmentIDs.GetNumberOfValues())
+        for index in range(0, segmentIDs.GetNumberOfValues()):
+          print(segmentIDs.GetValue(index))
+          self.ui.segmentSelectorCombBox.addItem("{0}: {1}".format(inputSeg.GetName(), segmentIDs.GetValue(index)))
 
     #Restore index - often we will be reloading the data from the same segmentation, so re-select items number of items is the same
-    if oldCount == self.ui.segmentSelectorCombBox.count:
-      for index in oldIndex:
-        self.ui.segmentSelectorCombBox.setCheckState(index, qt.Qt.Checked)
+    #if oldCount == self.ui.segmentSelectorCombBox.count:
+    #  for index in oldIndex:
+    #    self.ui.segmentSelectorCombBox.setCheckState(index, qt.Qt.Checked)
 
     self.updateParameterNodeFromGUI()
 
@@ -308,18 +321,20 @@ class ShapeworksRunnerWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     print("generateShapeworksProjectJson {0}".format(toggle))
     self.addLog("generateShapeworksProjectJson {0}".format(toggle))
 
-  def groomShapeworksProject(self, toggle):
-    inputParams = ["groom", "--name={0}".format(self.logic.projectFileName), "--progress"]
-    groomCmd = "groomShapeworksProject: {0} {1}".format(self.logic.shapeworksPath, repr(inputParams))
-    print(groomCmd)
-    self.addLog(groomCmd)
+  def runShapeworksCommand(self, inputParams, name):
+    swCmd = "{0}: {1} {2}".format(name, self.logic.shapeworksPath, repr(inputParams))
+    print(swCmd)
+    self.addLog(swCmd)
     ep = self.logic.runShapeworks(inputParams, self.logic.getShapeworksPath())
     self.logic.logProcessOutput(ep, self.logic.shapeworksFilename)
 
-  def optimizeShapeworksProject(self, toggle):
-    optimizeCmd = "optimizeShapeworksProject: {0} optimize --name=\"project_file\"".format(self.logic.shapeworksPath)
-    print(optimizeCmd)
-    self.addLog(optimizeCmd)
+  def groomShapeworksProject(self):
+    inputParams = ["groom", "--name={0}".format(self.logic.projectFileName), "--progress"]
+    self.runShapeworksCommand(inputParams, inputParams[0])
+
+  def optimizeShapeworksProject(self):
+    inputParams = ["optimize", "--name={0}".format(self.logic.projectFileName)]
+    self.runShapeworksCommand(inputParams, inputParams[0])
 
   def loadResultsOfShapeworksProject(self, toggle):
     print("loadResultsOfShapeworksProject")

@@ -71,12 +71,12 @@
        </widget>
       </item>
       <item row="0" column="1">
-       <widget class="qMRMLNodeComboBox" name="inputSegmentationSelector">
+       <widget class="qMRMLCheckableNodeComboBox" name="inputSegmentationSelector">
         <property name="enabled">
          <bool>true</bool>
         </property>
         <property name="toolTip">
-         <string>Volumetric mesh will be generated from this segmentation node.</string>
+         <string>Shapeworks will analyze these segmentation nodes.</string>
         </property>
         <property name="nodeTypes">
          <stringlist>
@@ -87,7 +87,7 @@
          <bool>false</bool>
         </property>
         <property name="noneEnabled">
-         <bool>true</bool>
+         <bool>false</bool>
         </property>
         <property name="addEnabled">
          <bool>false</bool>
@@ -100,7 +100,7 @@
       <item row="1" column="0">
        <widget class="QLabel" name="segmentSelectorLabel">
         <property name="text">
-         <string>Segment(s) to mesh:</string>
+         <string>Segment(s) to analyze:</string>
         </property>
        </widget>
       </item>
@@ -135,53 +135,7 @@
         </property>
        </widget>
       </item>
-      <item row="4" column="0">
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>Segment selector:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="1">
-       <widget class="QTreeWidget" name="treeWidget">
-        <column>
-         <property name="text">
-          <string>Segment</string>
-         </property>
-        </column>
-        <item>
-         <property name="text">
-          <string>New Item</string>
-         </property>
-         <item>
-          <property name="text">
-           <string>New Subitem</string>
-          </property>
-          <item>
-           <property name="text">
-            <string>New Subitem</string>
-           </property>
-          </item>
-         </item>
-        </item>
-        <item>
-         <property name="text">
-          <string>New Item</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>New Item</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>New Item</string>
-         </property>
-        </item>
-       </widget>
-      </item>
-      <item row="7" column="1">
+      <item row="6" column="1">
        <layout class="QGridLayout" name="gridLayout">
         <property name="leftMargin">
          <number>5</number>
@@ -202,14 +156,14 @@
           </property>
          </widget>
         </item>
-        <item row="1" column="0">
+        <item row="0" column="1">
          <widget class="QPushButton" name="groomPushButton_">
           <property name="text">
            <string>Groom</string>
           </property>
          </widget>
         </item>
-        <item row="0" column="1">
+        <item row="1" column="0">
          <widget class="QPushButton" name="optimizePushButton_">
           <property name="text">
            <string>Optimize</string>
